@@ -91,66 +91,30 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
             console.error('File data is missing or corrupted in the database:', entry);
             return res.status(500).json({
                 success: false,
-                error: 'File data is missing or corrupted in the database.',
-                debug: {
-                    typeofData: typeof entry.data,
-                    isArray: Array.isArray(entry.data),
-                    constructor: entry.data && entry.data.constructor && entry.data.constructor.name,
-                    length: entry.data && entry.data.length,
-                    preview: entry.data && entry.data.slice && entry.data.slice(0, 32)
-                }
+                error: 'File data is missing or corrupted in the database.'
             });
         }
-        // If data is a Buffer, send as is. If not, try to convert.
-        let fileBuffer = entry.data;
-        // Add debug logging for type and preview
-        console.log('Download: entry.data type:', typeof fileBuffer, Array.isArray(fileBuffer), fileBuffer && fileBuffer.constructor && fileBuffer.constructor.name, fileBuffer && fileBuffer.length, fileBuffer && fileBuffer.slice && fileBuffer.slice(0, 32));
-        // If it's a Buffer, just send it
-        if (Buffer.isBuffer(fileBuffer)) {
-            res.set('Content-Type', entry.mimetype || 'application/octet-stream');
-            res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
-            return res.send(fileBuffer);
+        // Always return the file as a string in a JSON response
+        let fileContent;
+        if (Buffer.isBuffer(entry.data)) {
+            fileContent = entry.data.toString('utf8');
+        } else if (typeof entry.data === 'string') {
+            fileContent = entry.data;
+        } else if (entry.data && entry.data.type === 'Buffer' && Array.isArray(entry.data.data)) {
+            fileContent = Buffer.from(entry.data.data).toString('utf8');
+        } else if (Array.isArray(entry.data)) {
+            fileContent = Buffer.from(entry.data).toString('utf8');
+        } else {
+            // Unknown type
+            return res.status(500).json({
+                success: false,
+                error: 'Unhandled file data type in database.'
+            });
         }
-        // If it's { type: 'Buffer', data: [...] }
-        if (fileBuffer && fileBuffer.type === 'Buffer' && Array.isArray(fileBuffer.data)) {
-            fileBuffer = Buffer.from(fileBuffer.data);
-            res.set('Content-Type', entry.mimetype || 'application/octet-stream');
-            res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
-            return res.send(fileBuffer);
-        }
-        // If it's an array (byte array)
-        if (Array.isArray(fileBuffer)) {
-            fileBuffer = Buffer.from(fileBuffer);
-            res.set('Content-Type', entry.mimetype || 'application/octet-stream');
-            res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
-            return res.send(fileBuffer);
-        }
-        // If it's a string, try base64 then utf8
-        if (typeof fileBuffer === 'string') {
-            try {
-                let b = Buffer.from(fileBuffer, 'base64');
-                if (b.length > 0) {
-                    fileBuffer = b;
-                } else {
-                    fileBuffer = Buffer.from(fileBuffer, 'utf8');
-                }
-            } catch (e) {
-                fileBuffer = Buffer.from(fileBuffer, 'utf8');
-            }
-            res.set('Content-Type', entry.mimetype || 'application/octet-stream');
-            res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
-            return res.send(fileBuffer);
-        }
-        // If we get here, we don't know how to handle it
-        console.error('Download: Unhandled fileBuffer type', typeof fileBuffer, fileBuffer);
-        return res.status(500).json({
-            success: false,
-            error: 'Unhandled file data type in database.'
-        });
+        return res.json({ success: true, data: fileContent });
     } catch (error) {
         console.error('Download error:', error);
-        res.status(500).json({         error: 'Internal server error' 
-        });
+        res.status(500).json({ error: 'Internal server error' });
     }
 });
 
