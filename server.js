@@ -231,6 +231,29 @@ app.get('/api/v1/stats', async (req, res) => {
     }
 });
 
+// Delete data by ID (requires password)
+app.delete('/api/v1/data/delete/:id', async (req, res) => {
+    try {
+        const rawId = req.params.id.replace(/^0+/, '');
+        const password = req.body.password || req.query.password;
+        const HARDCODED_PASSWORD = 'Sico13245';
+        if (password !== HARDCODED_PASSWORD) {
+            return res.status(403).json({ success: false, error: 'Invalid password' });
+        }
+        if (!rawId || isNaN(rawId)) {
+            return res.status(400).json({ success: false, error: 'Invalid ID format' });
+        }
+        const result = await pool.query('DELETE FROM uploaded_files WHERE id = $1 RETURNING id', [rawId]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ success: false, error: 'Data not found' });
+        }
+        return res.json({ success: true, message: 'Config deleted', id: rawId });
+    } catch (error) {
+        console.error('Delete error:', error);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
 // Add validateEntry function
 function validateEntry(entry) {
     const required = ['name', 'description', 'data', 'uploaderName'];
