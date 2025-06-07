@@ -71,6 +71,13 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
     try {
         // Remove leading zeros from the ID for database lookup
         const rawId = req.params.id.replace(/^0+/, '');
+        // Validate that rawId is a valid integer
+        if (!rawId || isNaN(rawId)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid ID format'
+            });
+        }
         const result = await pool.query('SELECT * FROM uploaded_files WHERE id = $1', [rawId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ 
@@ -79,8 +86,15 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
             });
         }
         const entry = result.rows[0];
-        res.set('Content-Type', entry.mimetype);
-        res.set('Content-Disposition', `attachment; filename="${entry.filename}"`);
+        // If data is missing or empty, return error
+        if (!entry.data || entry.data.length === 0) {
+            return res.status(500).json({
+                success: false,
+                error: 'File data is missing or corrupted in the database.'
+            });
+        }
+        res.set('Content-Type', entry.mimetype || 'application/octet-stream');
+        res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
         res.send(entry.data);
     } catch (error) {
         console.error('Download error:', error);
