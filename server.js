@@ -32,16 +32,29 @@ app.post('/api/v1/data/upload', upload.none(), async (req, res) => {
             });
         }
 
-        // Save to PostgreSQL
+        // Save to PostgreSQL with all metadata fields
+        const { name, description, category, uploaderName, data, pointCount, configName, version } = req.body;
         const result = await pool.query(
-            `INSERT INTO uploaded_files (filename, mimetype, data) VALUES ($1, $2, $3) RETURNING id` ,
-            [req.body.name.trim(), 'application/json', Buffer.from(req.body.data)]
+            `INSERT INTO uploaded_files (filename, mimetype, data, description, category, uploader_name, point_count, config_name, version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, uploaded_at` ,
+            [
+                name?.trim() || '',
+                'application/json',
+                Buffer.from(data),
+                description?.trim() || '',
+                category?.trim() || '',
+                uploaderName?.trim() || '',
+                pointCount ? parseInt(pointCount) : 0,
+                configName?.trim() || '',
+                version?.trim() || ''
+            ]
         );
         const newId = result.rows[0].id;
+        const uploadedAt = result.rows[0].uploaded_at;
 
         res.json({ 
             success: true, 
-            dataId: newId,
+            dataId: newId.toString().padStart(16, '0'),
+            uploadedAt,
             message: 'Data uploaded and saved to database!'
         });
     } catch (error) {
@@ -82,7 +95,7 @@ app.get('/api/v1/data/list', async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = Math.min(parseInt(req.query.limit) || 10, 50); // Max 50 per page
         const category = req.query.category;
-        let query = 'SELECT id, filename, mimetype, uploaded_at FROM uploaded_files';
+        let query = 'SELECT id, filename, mimetype, uploaded_at, description, category, uploader_name, point_count, config_name, version FROM uploaded_files';
         let params = [];
         if (category && category !== 'All') {
             query += ' WHERE LOWER(filename) LIKE $1';
@@ -104,9 +117,21 @@ app.get('/api/v1/data/list', async (req, res) => {
         const countResult = await pool.query(countQuery, countParams);
         const total = parseInt(countResult.rows[0].count, 10);
         const totalPages = Math.ceil(total / limit);
+        // Map to expected output, use string for id and pad to 16 chars for bigger look
+        const data = result.rows.map(row => ({
+            id: row.id.toString().padStart(16, '0'),
+            name: row.filename || '',
+            description: row.description || '',
+            category: row.category || '',
+            uploaderName: row.uploader_name || '',
+            pointCount: row.point_count || 0,
+            configName: row.config_name || '',
+            version: row.version || '',
+            uploadedAt: row.uploaded_at
+        }));
         res.json({
             success: true,
-            data: result.rows,
+            data,
             pagination: {
                 page,
                 limit,
