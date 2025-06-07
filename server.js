@@ -7,7 +7,6 @@ const multer = require('multer');
 const upload = multer();
 const cron = require('node-cron');
 
-
 const app = express();
 
 // Middleware
@@ -88,9 +87,12 @@ app.get('/api/v1/data/list', async (req, res) => {
         if (category && category !== 'All') {
             query += ' WHERE LOWER(filename) LIKE $1';
             params.push(`%${category.toLowerCase()}%`);
+            query += ' ORDER BY uploaded_at DESC LIMIT $2 OFFSET $3';
+            params.push(limit, (page - 1) * limit);
+        } else {
+            query += ' ORDER BY uploaded_at DESC LIMIT $1 OFFSET $2';
+            params.push(limit, (page - 1) * limit);
         }
-        query += ' ORDER BY uploaded_at DESC LIMIT $2 OFFSET $3';
-        params.push(limit, (page - 1) * limit);
         const result = await pool.query(query, params);
         // Get total count
         let countQuery = 'SELECT COUNT(*) FROM uploaded_files';
@@ -175,6 +177,31 @@ app.get('/api/v1/stats', async (req, res) => {
     }
 });
 
+// Add validateEntry function
+function validateEntry(entry) {
+    const required = ['name', 'description', 'data', 'uploaderName'];
+    for (const field of required) {
+        if (!entry[field] || entry[field].toString().trim().length === 0) {
+            return `Missing required field: ${field}`;
+        }
+    }
+    // Validate JSON data
+    try {
+        JSON.parse(entry.data);
+    } catch (e) {
+        return 'Invalid JSON data';
+    }
+    // Check name length
+    if (entry.name.length > 100) {
+        return 'Name too long (max 100 characters)';
+    }
+    // Check description length
+    if (entry.description.length > 500) {
+        return 'Description too long (max 500 characters)';
+    }
+    return null;
+}
+
 // Error handling middleware
 app.use((error, req, res, next) => {
     console.error('Unhandled error:', error);
@@ -209,7 +236,6 @@ function selfPing() {
 app.listen(PORT, () => {
     console.log(`BBG Data API Server running on port ${PORT}`);
     console.log(`Health check: http://localhost:${PORT}/api/v1/health`);
-    
     // Schedule self-ping every 60 seconds (only in production)
     if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
         cron.schedule('*/1 * * * *', selfPing); // Every minute
