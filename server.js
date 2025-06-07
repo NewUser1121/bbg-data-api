@@ -96,15 +96,19 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
         }
         // If data is a Buffer, send as is. If not, try to convert.
         let fileBuffer = entry.data;
-        if (!(fileBuffer instanceof Buffer)) {
+        // If data is a Postgres bytea (Buffer), this is fine. If it's a string (base64 or JSON), decode it.
+        if (typeof fileBuffer === 'string') {
+            // Try to detect if it's base64 or JSON string
             try {
-                fileBuffer = Buffer.from(fileBuffer);
+                // Try base64 first
+                fileBuffer = Buffer.from(fileBuffer, 'base64');
+                // If it's not valid base64, fallback to utf8
+                if (fileBuffer.length === 0) {
+                    fileBuffer = Buffer.from(entry.data, 'utf8');
+                }
             } catch (e) {
-                console.error('Failed to convert file data to Buffer:', e);
-                return res.status(500).json({
-                    success: false,
-                    error: 'Failed to process file data.'
-                });
+                // Fallback to utf8
+                fileBuffer = Buffer.from(entry.data, 'utf8');
             }
         }
         res.set('Content-Type', entry.mimetype || 'application/octet-stream');
