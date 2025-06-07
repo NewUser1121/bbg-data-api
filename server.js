@@ -69,7 +69,9 @@ app.post('/api/v1/data/upload', upload.none(), async (req, res) => {
 // Download data by ID (from PostgreSQL)
 app.get('/api/v1/data/download/:id', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM uploaded_files WHERE id = $1', [req.params.id]);
+        // Remove leading zeros from the ID for database lookup
+        const rawId = req.params.id.replace(/^0+/, '');
+        const result = await pool.query('SELECT * FROM uploaded_files WHERE id = $1', [rawId]);
         if (result.rows.length === 0) {
             return res.status(404).json({ 
                 success: false, 
@@ -98,8 +100,8 @@ app.get('/api/v1/data/list', async (req, res) => {
         let query = 'SELECT id, filename, mimetype, uploaded_at, description, category, uploader_name, point_count, config_name, version FROM uploaded_files';
         let params = [];
         if (category && category !== 'All') {
-            query += ' WHERE LOWER(filename) LIKE $1';
-            params.push(`%${category.toLowerCase()}%`);
+            query += ' WHERE LOWER(category) = $1';
+            params.push(category.toLowerCase());
             query += ' ORDER BY uploaded_at DESC LIMIT $2 OFFSET $3';
             params.push(limit, (page - 1) * limit);
         } else {
@@ -111,8 +113,8 @@ app.get('/api/v1/data/list', async (req, res) => {
         let countQuery = 'SELECT COUNT(*) FROM uploaded_files';
         let countParams = [];
         if (category && category !== 'All') {
-            countQuery += ' WHERE LOWER(filename) LIKE $1';
-            countParams.push(`%${category.toLowerCase()}%`);
+            countQuery += ' WHERE LOWER(category) = $1';
+            countParams.push(category.toLowerCase());
         }
         const countResult = await pool.query(countQuery, countParams);
         const total = parseInt(countResult.rows[0].count, 10);
