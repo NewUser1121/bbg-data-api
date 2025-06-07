@@ -88,14 +88,28 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
         const entry = result.rows[0];
         // If data is missing or empty, return error
         if (!entry.data || entry.data.length === 0) {
+            console.error('File data is missing or corrupted in the database:', entry);
             return res.status(500).json({
                 success: false,
                 error: 'File data is missing or corrupted in the database.'
             });
         }
+        // If data is a Buffer, send as is. If not, try to convert.
+        let fileBuffer = entry.data;
+        if (!(fileBuffer instanceof Buffer)) {
+            try {
+                fileBuffer = Buffer.from(fileBuffer);
+            } catch (e) {
+                console.error('Failed to convert file data to Buffer:', e);
+                return res.status(500).json({
+                    success: false,
+                    error: 'Failed to process file data.'
+                });
+            }
+        }
         res.set('Content-Type', entry.mimetype || 'application/octet-stream');
         res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
-        res.send(entry.data);
+        res.send(fileBuffer);
     } catch (error) {
         console.error('Download error:', error);
         res.status(500).json({ 
