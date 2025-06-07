@@ -96,28 +96,50 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
         }
         // If data is a Buffer, send as is. If not, try to convert.
         let fileBuffer = entry.data;
-        // Add debug logging for type
-        console.log('Download: entry.data type:', typeof fileBuffer, Array.isArray(fileBuffer), fileBuffer && fileBuffer.constructor && fileBuffer.constructor.name);
+        // Add debug logging for type and preview
+        console.log('Download: entry.data type:', typeof fileBuffer, Array.isArray(fileBuffer), fileBuffer && fileBuffer.constructor && fileBuffer.constructor.name, fileBuffer && fileBuffer.length, fileBuffer && fileBuffer.slice && fileBuffer.slice(0, 32));
+        // If it's a Buffer, just send it
+        if (fileBuffer instanceof Buffer) {
+            res.set('Content-Type', entry.mimetype || 'application/octet-stream');
+            res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
+            return res.send(fileBuffer);
+        }
+        // If it's { type: 'Buffer', data: [...] }
+        if (fileBuffer && fileBuffer.type === 'Buffer' && Array.isArray(fileBuffer.data)) {
+            fileBuffer = Buffer.from(fileBuffer.data);
+            res.set('Content-Type', entry.mimetype || 'application/octet-stream');
+            res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
+            return res.send(fileBuffer);
+        }
+        // If it's an array (byte array)
+        if (Array.isArray(fileBuffer)) {
+            fileBuffer = Buffer.from(fileBuffer);
+            res.set('Content-Type', entry.mimetype || 'application/octet-stream');
+            res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
+            return res.send(fileBuffer);
+        }
+        // If it's a string, try base64 then utf8
         if (typeof fileBuffer === 'string') {
             try {
-                // Try base64 first
-                fileBuffer = Buffer.from(fileBuffer, 'base64');
-                if (fileBuffer.length === 0) {
-                    fileBuffer = Buffer.from(entry.data, 'utf8');
+                let b = Buffer.from(fileBuffer, 'base64');
+                if (b.length > 0) {
+                    fileBuffer = b;
+                } else {
+                    fileBuffer = Buffer.from(fileBuffer, 'utf8');
                 }
             } catch (e) {
-                fileBuffer = Buffer.from(entry.data, 'utf8');
+                fileBuffer = Buffer.from(fileBuffer, 'utf8');
             }
-        } else if (Array.isArray(fileBuffer)) {
-            // Some drivers return bytea as array of bytes
-            fileBuffer = Buffer.from(fileBuffer);
-        } else if (fileBuffer && fileBuffer.type === 'Buffer' && Array.isArray(fileBuffer.data)) {
-            // Handle { type: 'Buffer', data: [...] }
-            fileBuffer = Buffer.from(fileBuffer.data);
+            res.set('Content-Type', entry.mimetype || 'application/octet-stream');
+            res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
+            return res.send(fileBuffer);
         }
-        res.set('Content-Type', entry.mimetype || 'application/octet-stream');
-        res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
-        res.send(fileBuffer);
+        // If we get here, we don't know how to handle it
+        console.error('Download: Unhandled fileBuffer type', typeof fileBuffer, fileBuffer);
+        return res.status(500).json({
+            success: false,
+            error: 'Unhandled file data type in database.'
+        });
     } catch (error) {
         console.error('Download error:', error);
         res.status(500).json({         error: 'Internal server error' 
