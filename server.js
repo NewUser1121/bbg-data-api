@@ -96,29 +96,31 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
         }
         // If data is a Buffer, send as is. If not, try to convert.
         let fileBuffer = entry.data;
-        // If data is a Postgres bytea (Buffer), this is fine. If it's a string (base64 or JSON), decode it.
+        // Add debug logging for type
+        console.log('Download: entry.data type:', typeof fileBuffer, Array.isArray(fileBuffer), fileBuffer && fileBuffer.constructor && fileBuffer.constructor.name);
         if (typeof fileBuffer === 'string') {
-            // Try to detect if it's base64 or JSON string
             try {
                 // Try base64 first
                 fileBuffer = Buffer.from(fileBuffer, 'base64');
-                // If it's not valid base64, fallback to utf8
                 if (fileBuffer.length === 0) {
                     fileBuffer = Buffer.from(entry.data, 'utf8');
                 }
             } catch (e) {
-                // Fallback to utf8
                 fileBuffer = Buffer.from(entry.data, 'utf8');
             }
+        } else if (Array.isArray(fileBuffer)) {
+            // Some drivers return bytea as array of bytes
+            fileBuffer = Buffer.from(fileBuffer);
+        } else if (fileBuffer && fileBuffer.type === 'Buffer' && Array.isArray(fileBuffer.data)) {
+            // Handle { type: 'Buffer', data: [...] }
+            fileBuffer = Buffer.from(fileBuffer.data);
         }
         res.set('Content-Type', entry.mimetype || 'application/octet-stream');
         res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
         res.send(fileBuffer);
     } catch (error) {
         console.error('Download error:', error);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Internal server error' 
+        res.status(500).json({         error: 'Internal server error' 
         });
     }
 });
