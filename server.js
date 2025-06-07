@@ -213,7 +213,4 @@ app.listen(PORT, () => {
         cron.schedule('*/1 * * * *', selfPing); // Every minute
         console.log('Self-ping scheduler activated - pinging every 60 seconds');
     }
-}).catch(error => {
-    console.error('Failed to start server:', error);
-    process.exit(1);
 });
