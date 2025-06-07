@@ -106,7 +106,7 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
         // Add debug logging for type and preview
         console.log('Download: entry.data type:', typeof fileBuffer, Array.isArray(fileBuffer), fileBuffer && fileBuffer.constructor && fileBuffer.constructor.name, fileBuffer && fileBuffer.length, fileBuffer && fileBuffer.slice && fileBuffer.slice(0, 32));
         // If it's a Buffer, just send it
-        if (fileBuffer instanceof Buffer) {
+        if (Buffer.isBuffer(fileBuffer)) {
             res.set('Content-Type', entry.mimetype || 'application/octet-stream');
             res.set('Content-Disposition', `attachment; filename="${entry.filename || 'file.json'}"`);
             return res.send(fileBuffer);
