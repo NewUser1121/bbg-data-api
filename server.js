@@ -3,6 +3,8 @@ const cors = require('cors');
 const { json } = require('body-parser');
 const fs = require('fs').promises;
 const path = require('path');
+const cron = require('node-cron');
+const https = require('https');
 
 const app = express();
 
@@ -346,10 +348,27 @@ app.use((req, res) => {
 // Start server
 const PORT = process.env.PORT || 3000;
 
+// Self-ping function to keep the server alive on Render
+function selfPing() {
+    const url = 'https://bbg-data-api.onrender.com';
+    
+    https.get(url, (res) => {
+        console.log(`Self-ping successful: ${res.statusCode}`);
+    }).on('error', (err) => {
+        console.error('Self-ping failed:', err.message);
+    });
+}
+
 initializeDatabase().then(() => {
     app.listen(PORT, () => {
         console.log(`BBG Data API Server running on port ${PORT}`);
         console.log(`Health check: http://localhost:${PORT}/api/v1/health`);
+        
+        // Schedule self-ping every 60 seconds (only in production)
+        if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
+            cron.schedule('*/1 * * * *', selfPing); // Every minute
+            console.log('Self-ping scheduler activated - pinging every 60 seconds');
+        }
     });
 }).catch(error => {
     console.error('Failed to start server:', error);
