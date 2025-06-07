@@ -1,0 +1,21 @@
+{
+  "entries": [
+    {
+      "id": "mblglk30607txlvim",
+      "name": "test-upload",
+      "description": "Test upload for workflow validation",
+      "category": "General",
+      "uploaderName": "TestUser",
+      "uploadDate": "2025-06-06T23:51:25.164Z",
+      "dataSize": 39,
+      "pointCount": 5,
+      "configName": "TestConfig",
+      "version": "0.3.5",
+      "data": "{\"testKey\":\"testValue\",\"version\":\"1.0\"}"
+    }
+  ],
+  "metadata": {
+    "created": "2025-06-06T23:17:35.695Z",
+    "version": "1.0.0"
+  }
+}
