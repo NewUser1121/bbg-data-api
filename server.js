@@ -91,7 +91,14 @@ app.get('/api/v1/data/download/:id', async (req, res) => {
             console.error('File data is missing or corrupted in the database:', entry);
             return res.status(500).json({
                 success: false,
-                error: 'File data is missing or corrupted in the database.'
+                error: 'File data is missing or corrupted in the database.',
+                debug: {
+                    typeofData: typeof entry.data,
+                    isArray: Array.isArray(entry.data),
+                    constructor: entry.data && entry.data.constructor && entry.data.constructor.name,
+                    length: entry.data && entry.data.length,
+                    preview: entry.data && entry.data.slice && entry.data.slice(0, 32)
+                }
             });
         }
         // If data is a Buffer, send as is. If not, try to convert.
