@@ -6,8 +6,12 @@ const pool = require('./db');
 const multer = require('multer');
 const upload = multer();
 const cron = require('node-cron');
+const crypto = require('crypto');
 
 const app = express();
+
+// In-memory store for one-time tokens (for demo; use Redis or DB in production)
+const updateTokens = {};
 
 // Middleware
 app.use(cors());
@@ -250,6 +254,60 @@ app.delete('/api/v1/data/delete/:id', async (req, res) => {
         return res.json({ success: true, message: 'Config deleted', id: rawId });
     } catch (error) {
         console.error('Delete error:', error);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// Generate a one-time update token for a config
+app.get('/api/v1/data/token/:id', async (req, res) => {
+    try {
+        const rawId = req.params.id.replace(/^0+/, '');
+        const result = await pool.query('SELECT * FROM uploaded_files WHERE id = $1', [rawId]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Data not found' });
+        }
+        // Generate a random token
+        const token = crypto.randomBytes(16).toString('hex');
+        updateTokens[rawId] = token;
+        setTimeout(() => { delete updateTokens[rawId]; }, 10 * 60 * 1000); // Token expires in 10 min
+        return res.json({ success: true, token });
+    } catch (error) {
+        console.error('Token error:', error);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// Update config by ID using a one-time token
+app.post('/api/v1/data/update/:id', async (req, res) => {
+    try {
+        const rawId = req.params.id.replace(/^0+/, '');
+        const { changes, token, data } = req.body;
+        if (!token || updateTokens[rawId] !== token) {
+            return res.status(403).json({ success: false, error: 'Invalid or expired token' });
+        }
+        if (!changes || typeof changes !== 'string' || !data) {
+            return res.status(400).json({ success: false, error: 'Missing changes or data' });
+        }
+        // Get current version
+        const result = await pool.query('SELECT * FROM uploaded_files WHERE id = $1', [rawId]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Data not found' });
+        }
+        const entry = result.rows[0];
+        // Parse and bump version
+        let version = entry.version || '1.0.0';
+        let [major, minor, patch] = version.split('.').map(Number);
+        patch = (patch || 0) + 1;
+        version = `${major || 1}.${minor || 0}.${patch}`;
+        // Update the config
+        await pool.query(
+            'UPDATE uploaded_files SET data = $1, version = $2, last_update = NOW(), last_changes = $3 WHERE id = $4',
+            [Buffer.from(data), version, changes, rawId]
+        );
+        delete updateTokens[rawId]; // Invalidate token
+        return res.json({ success: true, version });
+    } catch (error) {
+        console.error('Update error:', error);
         res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });
