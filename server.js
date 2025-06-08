@@ -304,10 +304,48 @@ app.post('/api/v1/data/update/:id', async (req, res) => {
             'UPDATE uploaded_files SET data = $1, version = $2, last_update = NOW(), last_changes = $3 WHERE id = $4',
             [Buffer.from(data), version, changes, rawId]
         );
+        // Insert changelog entry
+        await pool.query(
+            'INSERT INTO uploaded_files_changelog (config_id, version, date, changes) VALUES ($1, $2, NOW(), $3)',
+            [rawId, version, changes]
+        );
         delete updateTokens[rawId]; // Invalidate token
         return res.json({ success: true, version });
     } catch (error) {
         console.error('Update error:', error);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+// Changelog endpoint: returns full changelog history for a config
+app.get('/api/v1/data/changelog/:id', async (req, res) => {
+    try {
+        const rawId = req.params.id.replace(/^0+/, '');
+        // Query the changelog table for this config
+        const result = await pool.query(
+            'SELECT version, date, changes FROM uploaded_files_changelog WHERE config_id = $1 ORDER BY date DESC',
+            [rawId]
+        );
+        if (result.rows.length === 0) {
+            // Fallback: show current version if no changelog history exists
+            const fallback = await pool.query('SELECT version, last_update AS date, last_changes AS changes FROM uploaded_files WHERE id = $1', [rawId]);
+            if (fallback.rows.length === 0) {
+                return res.status(404).json({ success: false, error: 'Data not found' });
+            }
+            const row = fallback.rows[0];
+            if (!row.version && !row.date && !row.changes) {
+                return res.json({ success: true, changelog: [] });
+            }
+            return res.json({ success: true, changelog: [{
+                version: row.version || '',
+                date: row.date || '',
+                changes: row.changes || ''
+            }] });
+        }
+        // Return full changelog history
+        return res.json({ success: true, changelog: result.rows });
+    } catch (error) {
+        console.error('Changelog error:', error);
         res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });
